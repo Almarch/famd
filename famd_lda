@@ -1,0 +1,404 @@
+library(FactoMineR)
+library(agricolae)
+library(ade4)
+library(MASS)
+library(ggplot2)
+data(yacon)
+
+yacon$hauteur = cut(yacon$height,
+                    c(0,60,120,180,240,Inf)
+)
+
+# 1. PCA (principal component analysis) ####
+
+quanti = yacon[,6:19]
+
+# quanti = quanti[-225,] # ?
+
+head(quanti)
+cor(quanti)
+
+res_pca = FactoMineR::PCA(quanti)
+
+plot(res_pca$eig[,"cumulative percentage of variance"], type = "b")
+abline(h = 80, col = "red")
+
+plot(res_pca, axes = c(1, 2), choix = c("var"))
+plot(res_pca, axes = c(3, 4), choix = c("var"))
+
+plot(res_pca, axes = c(1, 2), choix = c("ind"))
+plot(res_pca, axes = c(3, 4), choix = c("ind"))
+
+# 2. LDA (linear discriminant analysis) ####
+# => expliquer une quali par des quantis
+
+## exemple 1 ####
+table(yacon$locality)
+
+res_lda = MASS::lda(locality ~ height +
+            stalks +
+            wfr +
+            wff +
+            wfk +
+            roots +
+            FOS +
+            glucose +
+            fructose +
+            sucrose +
+            brix +
+            foliage  +
+            dry +
+            IH,
+          data = yacon)
+
+
+scores <- as.data.frame(predict(res_lda)$x)
+scores$locality <- yacon$locality
+
+vars <- yacon[, c("height","stalks","wfr","wff","wfk","roots",
+                  "FOS","glucose","fructose","sucrose",
+                  "brix","foliage","dry","IH")]
+
+cor_df <- as.data.frame(cor(vars, scores[,1:2]))
+cor_df$var <- rownames(cor_df)
+
+theta <- seq(0, 2*pi, length.out = 100)
+circle <- data.frame(x = cos(theta), y = sin(theta))
+
+ggplot(cor_df, aes(x = LD1, y = LD2)) +
+  geom_path(data = circle, aes(x = x, y = y), color = "black") +
+  geom_segment(aes(x = 0, y = 0, xend = LD1, yend = LD2),
+               arrow = arrow(length = unit(0.2,"cm")),
+               color = "blue") +
+  geom_text(aes(label = var), hjust = 1.1, vjust = 1.1) +
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  geom_vline(xintercept = 0, linetype = "dashed") +
+  coord_equal() +
+  theme_minimal() +
+  ggtitle("Cercle de corrélations (LDA)")
+
+ggplot(scores, aes(x = LD1, y = LD2, color = locality)) +
+  geom_point(size = 3, alpha = 0.8) +
+  stat_ellipse() +
+  theme_minimal() +
+  ggtitle("Projection des individus (LDA)")
+
+## exemple 2 ####
+
+table(yacon$hauteur)
+
+res_lda = lda(hauteur ~ height +
+                stalks +
+                wfr +
+                wff +
+                wfk +
+                roots +
+                FOS +
+                glucose +
+                fructose +
+                sucrose +
+                brix +
+                foliage  +
+                dry +
+                IH,
+              data = yacon)
+
+
+scores <- as.data.frame(predict(res_lda)$x)
+scores$hauteur <- yacon$hauteur
+
+vars <- yacon[, c("height","stalks","wfr","wff","wfk","roots",
+                  "FOS","glucose","fructose","sucrose",
+                  "brix","foliage","dry","IH")]
+
+cor_df <- as.data.frame(cor(vars, scores[,1:2]))
+cor_df$var <- rownames(cor_df)
+
+theta <- seq(0, 2*pi, length.out = 100)
+circle <- data.frame(x = cos(theta), y = sin(theta))
+
+ggplot(cor_df, aes(x = LD1, y = LD2)) +
+  geom_path(data = circle, aes(x = x, y = y), color = "black") +
+  geom_segment(aes(x = 0, y = 0, xend = LD1, yend = LD2),
+               arrow = arrow(length = unit(0.2,"cm")),
+               color = "blue") +
+  geom_text(aes(label = var), hjust = 1.1, vjust = 1.1) +
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  geom_vline(xintercept = 0, linetype = "dashed") +
+  coord_equal() +
+  theme_minimal() +
+  ggtitle("Cercle de corrélations (LDA)")
+
+ggplot(scores, aes(x = LD1, y = LD2, color = hauteur)) +
+  geom_point(size = 3, alpha = 0.8) +
+  stat_ellipse() +
+  theme_minimal() +
+  ggtitle("Projection des individus (LDA)")
+
+# 3. MCA (multiple correspondance analysis) ####
+
+head(yacon)
+
+quali = yacon[,c("locality","dose","hauteur")]
+
+res_acm = FactoMineR::MCA(quali)
+
+plot(res_acm, axes = c(1,3), choix = c("var"))
+
+# 4. FAMD (factorial analysis of mixed data) ####
+
+X = cbind(quanti,quali)
+res_famd = FactoMineR::FAMD(X)
+
+# 5. PLS (partial least square) ####
+# => expliquer une quanti par des quantis
+# => equivalent de l'AFD mais avec une variable à expliquer quanti
+
+# 6. FAMD + LDA ####
+
+quanti <- c("height","stalks","wfr","wff","wfk","roots",
+            "FOS","glucose","fructose","sucrose",
+            "brix","foliage","dry","IH")
+quali <- c("hauteur","dose")
+target <- "locality"
+
+mix <- ade4::dudi.mix(yacon[,c(quanti, quali)], scannf = FALSE)
+discr <- ade4::discrimin(mix, fac = yacon[,target], scannf = FALSE)
+
+## a. Analyse de la FAMD ####
+
+# => utiliser FactoMineR
+# => comparons ade4 à FactoMineR
+#    pour vérifier le code
+
+res = FactoMineR::FAMD(yacon[,c(quanti, quali)])
+analyse = mix
+
+### i. Cercle des correlations ####
+
+cor_quanti <- sapply(quanti, function(v) 
+  cor(yacon[[v]], analyse$li[,1:2], use = "complete.obs")
+)
+
+cor_df <- as.data.frame(t(cor_quanti))
+cor_df$var <- rownames(cor_df)
+colnames(cor_df)[1:2] <- c("Axis1","Axis2")
+
+theta <- seq(0, 2*pi, length.out = 100)
+circle <- data.frame(x = cos(theta), y = sin(theta))
+
+# Plot
+ggplot(cor_df, aes(x = Axis1, y = Axis2)) +
+  geom_path(data = circle, aes(x = x, y = y), color = "black") +
+  geom_segment(aes(x = 0, y = 0, xend = Axis1, yend = Axis2),
+               arrow = arrow(length = unit(0.2,"cm")),
+               color = "blue") +
+  geom_text(aes(label = var), hjust = 1.1, vjust = 1.1) +
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  geom_vline(xintercept = 0, linetype = "dashed") +
+  coord_equal() +
+  theme_minimal() +
+  ggtitle("Cercle de corrélations")
+
+### ii. Projection des individus + modalités ####
+
+# Individus
+ind_df <- as.data.frame(analyse$li[,1:2])
+colnames(ind_df) <- c("Axis1","Axis2")
+
+# Barycentres des modalités
+mod_list <- lapply(quali, function(v) 
+  aggregate(ind_df, by = list(label = yacon[[v]]), FUN = mean)
+)
+mod_df <- do.call(rbind, mod_list)
+
+ggplot() +
+  geom_point(data = ind_df, 
+             aes(x = Axis1, y = Axis2), 
+             size = 2, alpha = 0.5, color = "steelblue") +
+  geom_point(data = mod_df,
+             aes(x = Axis1, y = Axis2),
+             size = 3, shape = 17, color = "red") +
+  geom_text(data = mod_df,
+            aes(x = Axis1, y = Axis2, label = label),
+            color = "red", hjust = -0.2, size = 3) +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "grey50") +
+  geom_vline(xintercept = 0, linetype = "dashed", color = "grey50") +
+  theme_minimal() +
+  labs(title = "Individus et barycentres des modalités",
+       x = paste0("Axis 1 (", round(analyse$eig[1]/sum(analyse$eig)*100, 1), "%)"),
+       y = paste0("Axis 2 (", round(analyse$eig[2]/sum(analyse$eig)*100, 1), "%)"))
+
+### iii. Importance des variables  ####
+
+# Individus
+ind_df <- as.data.frame(analyse$li[,1:2])
+colnames(ind_df) <- c("Axis1","Axis2")
+
+# Barycentres des modalités
+mod_list <- lapply(quali, function(v) 
+  aggregate(ind_df, by = list(label = yacon[[v]]), FUN = mean)
+)
+mod_df <- do.call(rbind, mod_list)
+
+# Quanti : cor²
+cor2 <- sapply(quanti, function(v)
+  cor(yacon[[v]], ind_df)^2
+)
+cor2_df <- as.data.frame(t(cor2))
+colnames(cor2_df) <- c("Axis1", "Axis2")
+
+# Quali : eta² depuis barycentres
+eta2_list <- lapply(quali, function(v) {
+  bary <- aggregate(ind_df, by = list(label = yacon[[v]]), FUN = mean)
+  ni <- table(yacon[[v]])
+  var_tot <- colSums(ind_df^2)
+  var_inter <- colSums(as.matrix(ni) * bary[, c("Axis1","Axis2")]^2)
+  var_inter / var_tot
+})
+eta2_df <- as.data.frame(do.call(rbind, eta2_list))
+rownames(eta2_df) <- quali
+colnames(eta2_df) <- c("Axis1", "Axis2")
+
+# Assemblage
+cor2_df$type = "quali"
+eta2_df$type = "quanti"
+cr_df <- rbind(cor2_df, eta2_df)
+cr_df$label <- rownames(cr_df)
+
+ggplot() +
+  geom_point(data = cr_df,
+             aes(x = Axis1, y = Axis2, color = type),
+             size = 3, shape = 17) +
+  geom_text(data = cr_df,
+            aes(x = Axis1, y = Axis2, color = type, label = label),
+            hjust = -0.2, size = 3, show.legend = FALSE) +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "grey50") +
+  geom_vline(xintercept = 0, linetype = "dashed", color = "grey50") +
+  xlim(0, 1) + ylim(0, 1) +
+  theme_minimal() +
+  labs(title = "Importance des variables",
+       x = paste0("Axis 1 (", round(analyse$eig[1]/sum(analyse$eig)*100, 1), "%)"),
+       y = paste0("Axis 2 (", round(analyse$eig[2]/sum(analyse$eig)*100, 1), "%)"))
+
+## b. Analyse de l'AFD mixte ####
+
+analyse = discr
+
+### i. Cercle des correlations ####
+
+cor_quanti <- sapply(quanti, function(v) 
+  cor(yacon[[v]], analyse$li[,1:2], use = "complete.obs")
+)
+
+cor_df <- as.data.frame(t(cor_quanti))
+cor_df$var <- rownames(cor_df)
+colnames(cor_df)[1:2] <- c("Axis1","Axis2")
+
+theta <- seq(0, 2*pi, length.out = 100)
+circle <- data.frame(x = cos(theta), y = sin(theta))
+
+# Plot
+ggplot(cor_df, aes(x = Axis1, y = Axis2)) +
+  geom_path(data = circle, aes(x = x, y = y), color = "black") +
+  geom_segment(aes(x = 0, y = 0, xend = Axis1, yend = Axis2),
+               arrow = arrow(length = unit(0.2,"cm")),
+               color = "blue") +
+  geom_text(aes(label = var), hjust = 1.1, vjust = 1.1) +
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  geom_vline(xintercept = 0, linetype = "dashed") +
+  coord_equal() +
+  theme_minimal() +
+  ggtitle("Cercle de corrélations")
+
+### ii. Projection des individus ####
+
+ind_df <- as.data.frame(analyse$li[,1:2])
+colnames(ind_df) <- c("Axis1","Axis2")
+ind_df$target <- yacon[,target]
+
+# Barycentres des modalités
+mod_list <- lapply(quali, function(v) 
+  aggregate(ind_df[,1:2], by = list(label = yacon[[v]]), FUN = mean)
+)
+mod_df <- do.call(rbind, mod_list)
+
+ggplot(data = ind_df, 
+       aes(x = Axis1, y = Axis2, color = target)) +
+  geom_point(size = 2, alpha = 0.5) +
+  stat_ellipse(level = 0.68) +
+  geom_point(data = mod_df,
+             aes(x = Axis1, y = Axis2),
+             size = 3, shape = 17, color = "red") +
+  geom_text(data = mod_df,
+            aes(x = Axis1, y = Axis2, label = label),
+            color = "red", hjust = -0.2, size = 3) +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "grey50") +
+  geom_vline(xintercept = 0, linetype = "dashed", color = "grey50") +
+  theme_minimal() +
+  labs(title = "Individus et barycentres des modalités",
+       x = paste0("Axis 1 (", round(analyse$eig[1]/sum(analyse$eig)*100, 1), "%)"),
+       y = paste0("Axis 2 (", round(analyse$eig[2]/sum(analyse$eig)*100, 1), "%)"))
+
+### iii. Importance des variables  ####
+
+# Individus
+ind_df <- as.data.frame(analyse$li[,1:2])
+colnames(ind_df) <- c("Axis1","Axis2")
+
+# Barycentres des modalités
+mod_list <- lapply(quali, function(v) 
+  aggregate(ind_df, by = list(label = yacon[[v]]), FUN = mean)
+)
+mod_df <- do.call(rbind, mod_list)
+
+# Quanti : cor²
+cor2 <- sapply(quanti, function(v)
+  cor(yacon[[v]], ind_df)^2
+)
+cor2_df <- as.data.frame(t(cor2))
+colnames(cor2_df) <- c("Axis1", "Axis2")
+
+# Quali : eta² depuis barycentres
+eta2_list <- lapply(quali, function(v) {
+  bary <- aggregate(ind_df, by = list(label = yacon[[v]]), FUN = mean)
+  ni <- table(yacon[[v]])
+  var_tot <- colSums(ind_df^2)
+  var_inter <- colSums(as.matrix(ni) * bary[, c("Axis1","Axis2")]^2)
+  var_inter / var_tot
+})
+eta2_df <- as.data.frame(do.call(rbind, eta2_list))
+rownames(eta2_df) <- quali
+colnames(eta2_df) <- c("Axis1", "Axis2")
+
+# Assemblage
+cor2_df$type = "quali"
+eta2_df$type = "quanti"
+cr_df <- rbind(cor2_df, eta2_df)
+cr_df$label <- rownames(cr_df)
+
+ggplot() +
+  geom_point(data = cr_df,
+             aes(x = Axis1, y = Axis2, color = type),
+             size = 3, shape = 17) +
+  geom_text(data = cr_df,
+            aes(x = Axis1, y = Axis2, color = type, label = label),
+            hjust = -0.2, size = 3, show.legend = FALSE) +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "grey50") +
+  geom_vline(xintercept = 0, linetype = "dashed", color = "grey50") +
+  xlim(0, 1) + ylim(0, 1) +
+  theme_minimal() +
+  labs(title = "Importance des variables",
+       x = paste0("Axis 1 (", round(analyse$eig[1]/sum(analyse$eig)*100, 1), "%)"),
+       y = paste0("Axis 2 (", round(analyse$eig[2]/sum(analyse$eig)*100, 1), "%)"))
+
+### iv. Importance des variables, 1 seul axe ####
+
+ggplot(cr_df, aes(x = reorder(label, Axis1), y = Axis1, fill = type)) +
+  geom_bar(stat = "identity") +
+  ylim(0, 1) +
+  coord_flip() +
+  theme_minimal() +
+  labs(title = "Importance des variables - Axe 1",
+       x = "", y = "r² (quanti) - η² (quali)")
+
