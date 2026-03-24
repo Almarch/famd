@@ -4,7 +4,7 @@ library(agricolae)
 library(ade4)
 data(yacon)
 
-yacon$height = cut(yacon$height,c(0,80,160,Inf))
+yacon$height = cut(yacon$height,c(0,80,120,160,200,Inf))
 n = nrow(yacon)
 
 quanti = yacon[,c(7:10)]
@@ -81,20 +81,48 @@ for(j in 1:ncol(a)){
   )
 }
 
+# cor2
+eta2 <- matrix(
+  NA,
+  nrow = ncol(quali),
+  ncol = ncol(a)
+)
+rownames(eta2) = colnames(quali)
+incidence <- rep(1:ncol(quali), sapply(quali, nlevels))
+avg_coord <- 1/diag(D) * t(X_quali) %*% coord
+for (k in 1:ncol(quali)) {
+  idx <- which(incidence == k)
+  for (j in 1:ncol(a)) {
+    eta2[k, j] <- sum(diag(D)[idx] * avg_coord[idx, j]^2) / (n * l[j])
+  }
+}
+
 ## individuals ####
-par(mfrow=c(1,2),mai=c(2,2,1,1)/2.54)
+par(mfrow=c(1,1),mai=c(2,2,1,1)/2.54)
 plot(coord[,1], coord[,2],
      xlab=paste0("Component 1 : ",lambda[1],"% inertia"),
      ylab=paste0("Component 2 : ",lambda[2],"% inertia"))
 abline(v=0,col="black"); abline(h=0,col="black")
 
 ## variables ####
+par(mfrow=c(1,2),mai=c(2,2,1,1)/2.54)
+
+# modalites
 plot(a[,1], a[,2],
      col = "red",pch = 4,cex=2,
      xlab=paste0("Component 1 : ",lambda[1],"% inertia"),
      ylab=paste0("Component 2 : ",lambda[2],"% inertia"))
 abline(v=0,col="black"); abline(h=0,col="black")
 text(a[,1]+0.05,a[,2]+.05,labels=colnames(X_quali), col = "red")
+
+# facteurs
+plot(eta2[, 1], eta2[, 2],
+     col = "red",pch = 19,cex=1.5,
+     xlab = paste0("Component 1 : ", lambda[1], "% inertia"),
+     ylab = paste0("Component 2 : ", lambda[2], "% inertia"),
+     xlim = c(0, 1), ylim = c(0, 1))
+abline(v=0,col="black"); abline(h=0,col="black")
+text(eta2[, 1]+0.05, eta2[, 2]+0.05,labels=rownames(eta2), col = "red")
 
 ## FactoMineR ####
 res = FactoMineR::MCA(yacon[,c(1,3,6)])
@@ -106,9 +134,10 @@ X_quanti = as.matrix(quanti - rep(colMeans(quanti), each = n))
 s  <- sqrt(colSums(X_quanti^2) / n)
 X_quanti <- X_quanti / rep(s, each = n) 
 
-X_quali = as.matrix(acm.disjonctif(quali))
+X_quali_brut = as.matrix(acm.disjonctif(quali))
+X_quali = X_quali_brut
 
-D = diag(apply(X_quali,2,sum))
+D = diag(apply(X_quali_brut,2,sum))
 
 for(i in 1:ncol(X_quali)){
  proba = sqrt(sum(X_quali[,i]) / n)
@@ -152,8 +181,30 @@ for(j in 1:ncol(a)) {
 
 r = a[1:ncol(quanti),]
 
+# cor2
+eta2 <- matrix(
+  NA,
+  nrow = ncol(quanti) + ncol(quali),
+  ncol = ncol(a)
+)
+rownames(eta2) = c(colnames(quanti), colnames(quali))
+incidence <- rep(1:ncol(quali), sapply(quali, nlevels))
+avg_coord <- 1/diag(D) * t(X_quali_brut) %*% coord
+for (k in 1:ncol(quali)) {
+  idx <- which(incidence == k)
+  for (j in 1:ncol(a)) {
+    eta2[ncol(quanti) + k, j] <- sum(diag(D)[idx] * avg_coord[idx, j]^2) / (n * l[j])
+  }
+}
+
+for(k in 1:ncol(quanti)) {
+  for (j in 1:ncol(a)) {
+    eta2[k, j] = r[k,j]**2
+  }
+}
+
 ## correlations ####
-par(mfrow=c(1,2),mai=c(2,2,1,1)/2.54)
+par(mfrow=c(1,3),mai=c(2,2,1,1)/2.54)
 (lambda <- round(l*100/sum(l),1))
 cercle=seq(0,2*pi, length=1000)
 
@@ -176,7 +227,14 @@ points(c[,1], c[,2],
 abline(v=0,col="black"); abline(h=0,col="black")
 text(c[,1]+0.05,c[,2]+.05,labels=colnames(X_quali), col = "red")
 
+# facteurs
+plot(eta2[, 1], eta2[, 2],
+     col = "red",pch = 19,cex=1.5,
+     xlab = paste0("Component 1 : ", lambda[1], "% inertia"),
+     ylab = paste0("Component 2 : ", lambda[2], "% inertia"),
+     xlim = c(0, 1), ylim = c(0, 1))
+abline(v=0,col="black"); abline(h=0,col="black")
+text(eta2[, 1]+0.05, eta2[, 2]+0.05,labels=rownames(eta2), col = "red")
+
 # FactoMineR
 res = FactoMineR::FAMD(yacon[,c(1,3,6,7:10)])
-
-
